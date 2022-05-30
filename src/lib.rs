@@ -1,57 +1,40 @@
-use std::io::prelude::*;
-use std::net::TcpListener;
-use std::net::TcpStream;
+pub mod core;
+pub mod ruby_ext;
 
-const HELLO: &'static str = "<!DOCTYPE html>
-<html lang=\"en\">
-  <head>
-    <meta charset=\"utf-8\">
-    <title>Hello!</title>
-  </head>
-  <body>
-    <h1>Hello!</h1>
-    <p>Hi from Rust</p>
-  </body>
-    </html>";
+use std::error::Error;
 
-pub fn serve() {
-    let listner = TcpListener::bind("127.0.0.1:17878").unwrap();
-    println!(
-        "Listening: http://{}",
-        listner.local_addr().unwrap().to_string()
-    );
+use coffret::*;
 
-    for stream in listner.incoming() {
-        let stream = stream.unwrap();
-        handle_connection(stream);
-    }
+// #[cfg(test)]
+// mod tests {
+
+//     #[test]
+//     fn it_works() {
+//         let result = 2 + 2;
+//         assert_eq!(result, 4);
+//     }
+// }
+
+fn init_flamboyant_internal() -> Result<(), Box<dyn Error>> {
+    println!("Rust loaded");
+    let object = class::object_class();
+    let klass = class::define_class("Flamboyant", object);
+
+    //unsafe { rb_define_singleton_method(klass, function_name.as_ptr(), Some(test_hola), 0) }
+
+    //let callback = class::make_callback(&crate::core::rb_flamboyant_serve);
+    let callback: crate::ruby_ext::RubyFn =
+        (crate::core::rb_flamboyant_serve as unsafe extern "C" fn(u64) -> u64).into();
+
+    class::define_method(klass, "serve", callback.into(), 0);
+    Ok(())
 }
 
-fn handle_connection(mut stream: TcpStream) {
-    let mut buffer = [0; 4096];
-
-    stream.read(&mut buffer).unwrap();
-
-    println!("Request: {}", String::from_utf8_lossy(&buffer[..]));
-
-    let response = vec![
-        "HTTP/1.1 200 OK".to_string(),
-        format!("Content-Length: {}", HELLO.len()),
-        "".to_string(),
-        HELLO.to_string(),
-    ]
-    .join("\r\n");
-
-    stream.write(response.as_bytes()).unwrap();
-    stream.flush().unwrap();
-}
-
-#[cfg(test)]
-mod tests {
-
-    #[test]
-    fn it_works() {
-        let result = 2 + 2;
-        assert_eq!(result, 4);
+#[allow(non_snake_case)]
+#[no_mangle]
+pub extern "C" fn Init_flamboyant() {
+    match init_flamboyant_internal() {
+        Err(e) => exception::rustly_raise(e.as_ref()),
+        Ok(_) => {}
     }
 }

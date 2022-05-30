@@ -1,3 +1,3 @@
-module Flamboyant
-  VERSION = "0.1.0"
+class Flamboyant
+  VERSION = "0.0.1.pre"
 end

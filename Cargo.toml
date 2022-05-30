@@ -4,5 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+crate-type = ["cdylib"]
 
 [dependencies]
+libc = "^0.2"
+rb-sys = { version = "0.8.1", features = ["link-ruby"] }
+coffret = "0.0.2"

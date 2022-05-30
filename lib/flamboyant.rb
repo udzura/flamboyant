@@ -1,6 +1,8 @@
 require "flamboyant/version"
 
-module Flamboyant
+class Flamboyant
   class Error < StandardError; end
   # Your code goes here...
 end
+
+require 'flamboyant.so'
