@@ -1,5 +1,7 @@
 extern crate flamboyant;
 
 fn main() {
-    flamboyant::serve();
+    unsafe {
+        flamboyant::core::rb_flamboyant_serve(flamboyant::ruby_ext::Nil.into());
+    }
 }

@@ -11,3 +11,4 @@ crate-type = ["cdylib"]
 libc = "^0.2"
 rb-sys = { version = "0.8.1", features = ["link-ruby"] }
 coffret = "0.0.2"
+ctrlc = "3.2.2"

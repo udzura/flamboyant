@@ -23,6 +23,11 @@ pub unsafe extern "C" fn rb_flamboyant_serve(_slf: RubyValue) -> RubyValue {
 }
 
 fn do_serve() {
+    unsafe {
+        libc::signal(libc::SIGINT, libc::SIG_DFL);
+        libc::signal(libc::SIGTERM, libc::SIG_DFL);
+    }
+
     let listner = TcpListener::bind("127.0.0.1:17878").unwrap();
     println!(
         "Listening: http://{}",
