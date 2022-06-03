@@ -24,9 +24,9 @@ fn init_flamboyant_internal() -> Result<(), Box<dyn Error>> {
 
     //let callback = class::make_callback(&crate::core::rb_flamboyant_serve);
     let callback: crate::ruby_ext::RubyFn =
-        (crate::core::rb_flamboyant_serve as unsafe extern "C" fn(u64) -> u64).into();
+        (crate::core::rb_flamboyant_serve as unsafe extern "C" fn(u64, u64) -> u64).into();
 
-    class::define_method(klass, "serve", callback.into(), 0);
+    class::define_method(klass, "serve", callback.into(), 1);
     Ok(())
 }
 

@@ -18,7 +18,7 @@ const _HELLO: &'static str = "<!DOCTYPE html>
     </html>";
 
 #[no_mangle]
-pub unsafe extern "C" fn rb_flamboyant_serve(callback: RubyValue) -> RubyValue {
+pub unsafe extern "C" fn rb_flamboyant_serve(_slf: RubyValue, callback: RubyValue) -> RubyValue {
     serve(callback);
     return crate::ruby_ext::Nil.into();
 }
@@ -46,13 +46,28 @@ fn handle_connection(app: RubyValue, mut stream: TcpStream) {
 
     stream.read(&mut buffer).unwrap();
 
-    let string = CString::new(&buffer[..]).unwrap();
+    let index = buffer
+        .iter()
+        .enumerate()
+        .find(|(_i, chr)| return **chr == ('\0' as u8))
+        .unwrap();
+    let string = CString::new(&buffer[..index.0]).unwrap();
+    println!("cstring: {:?}", &string);
     let reqstring = unsafe { rb_utf8_str_new_cstr(string.as_ptr()) };
     let call = CString::new("call").unwrap();
-    let response = unsafe { rb_funcall(app, rb_intern(call.as_ptr()), 1, reqstring) };
+    let args = vec![reqstring];
+    let response = unsafe { rb_funcallv(app, rb_intern(call.as_ptr()), 1, args.as_ptr()) };
+    unsafe { rb_p(response) };
+    //unsafe { rb_gc_writebarrier(app, response) };
     let mut response = Box::new(response);
-    let bytes: *mut i8 = unsafe { rb_string_value_cstr(response.as_mut()) };
-    let bytes = unsafe { CString::from_raw(bytes) };
+
+    let bytes: *mut i8 = unsafe { rb_string_value_ptr(response.as_mut()) };
+    let bytes: Vec<u8> = unsafe { Vec::from_raw_parts(bytes, 57, 57) }
+        .iter()
+        .map(|v| *v as u8)
+        .collect();
+    let bytes = CString::from_vec_with_nul(bytes).unwrap();
+    println!("cstring: {:?}", &bytes);
 
     stream.write(bytes.as_bytes()).unwrap();
     stream.flush().unwrap();
