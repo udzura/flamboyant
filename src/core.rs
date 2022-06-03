@@ -1,10 +1,11 @@
+use std::ffi::CString;
 use std::io::prelude::*;
 use std::net::TcpListener;
 use std::net::TcpStream;
 
 use rb_sys::*;
 
-const HELLO: &'static str = "<!DOCTYPE html>
+const _HELLO: &'static str = "<!DOCTYPE html>
 <html lang=\"en\">
   <head>
     <meta charset=\"utf-8\">
@@ -17,12 +18,12 @@ const HELLO: &'static str = "<!DOCTYPE html>
     </html>";
 
 #[no_mangle]
-pub unsafe extern "C" fn rb_flamboyant_serve(_slf: RubyValue) -> RubyValue {
-    do_serve();
+pub unsafe extern "C" fn rb_flamboyant_serve(callback: RubyValue) -> RubyValue {
+    serve(callback);
     return crate::ruby_ext::Nil.into();
 }
 
-fn do_serve() {
+fn serve(app: RubyValue) {
     unsafe {
         libc::signal(libc::SIGINT, libc::SIG_DFL);
         libc::signal(libc::SIGTERM, libc::SIG_DFL);
@@ -36,25 +37,23 @@ fn do_serve() {
 
     for stream in listner.incoming() {
         let stream = stream.unwrap();
-        handle_connection(stream);
+        handle_connection(app, stream);
     }
 }
 
-fn handle_connection(mut stream: TcpStream) {
+fn handle_connection(app: RubyValue, mut stream: TcpStream) {
     let mut buffer = [0; 4096];
 
     stream.read(&mut buffer).unwrap();
 
-    println!("Request: {}", String::from_utf8_lossy(&buffer[..]));
+    let string = CString::new(&buffer[..]).unwrap();
+    let reqstring = unsafe { rb_utf8_str_new_cstr(string.as_ptr()) };
+    let call = CString::new("call").unwrap();
+    let response = unsafe { rb_funcall(app, rb_intern(call.as_ptr()), 1, reqstring) };
+    let mut response = Box::new(response);
+    let bytes: *mut i8 = unsafe { rb_string_value_cstr(response.as_mut()) };
+    let bytes = unsafe { CString::from_raw(bytes) };
 
-    let response = vec![
-        "HTTP/1.1 200 OK".to_string(),
-        format!("Content-Length: {}", HELLO.len()),
-        "".to_string(),
-        HELLO.to_string(),
-    ]
-    .join("\r\n");
-
-    stream.write(response.as_bytes()).unwrap();
+    stream.write(bytes.as_bytes()).unwrap();
     stream.flush().unwrap();
 }
