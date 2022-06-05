@@ -1,5 +1,6 @@
 use std::ffi::CString;
 use std::io::prelude::*;
+use std::mem::forget;
 use std::net::TcpListener;
 use std::net::TcpStream;
 
@@ -62,13 +63,18 @@ fn handle_connection(app: RubyValue, mut stream: TcpStream) {
     let mut response = Box::new(response);
 
     let bytes: *mut i8 = unsafe { rb_string_value_ptr(response.as_mut()) };
-    let bytes: Vec<u8> = unsafe { Vec::from_raw_parts(bytes, 57, 57) }
-        .iter()
-        .map(|v| *v as u8)
-        .collect();
-    let bytes = CString::from_vec_with_nul(bytes).unwrap();
-    println!("cstring: {:?}", &bytes);
+    let bytes_: Vec<i8> = unsafe { Vec::from_raw_parts(bytes, 4096, 4096) };
+    let bytes: Vec<u8> = bytes_.iter().map(|v| *v as u8).collect();
+    forget(bytes_);
 
-    stream.write(bytes.as_bytes()).unwrap();
+    let index = bytes
+        .iter()
+        .enumerate()
+        .find(|(_i, chr)| return **chr == ('\0' as u8))
+        .unwrap();
+    let bytes = &bytes[..index.0];
+    // println!("cstring: {:?}", bytes);
+
+    stream.write(bytes).unwrap();
     stream.flush().unwrap();
 }
