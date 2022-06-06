@@ -61,6 +61,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
+name = "cc"
+version = "1.0.73"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2fff2a6927b3bb87f9595d67196a70493f627687a71d87a0d692242c33f58c11"
+
+[[package]]
 name = "cexpr"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -103,9 +109,9 @@ dependencies = [
 
 [[package]]
 name = "coffret"
-version = "0.0.2"
+version = "0.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "636f676a32a653581d14598d84d8bc50e20e66059f73578fa5fcda8b5dd565ae"
+checksum = "efb0b42fe7c89fec1939af9293f94403f32bab4ac86769dbd8362d34c40e649c"
 dependencies = [
  "libc",
  "rb-sys",
@@ -200,6 +206,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "linkify"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "28d9967eb7d0bc31c39c6f52e8fce42991c0cd1f7a2078326f0b7a399a584c8d"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "log"
 version = "0.4.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -273,13 +288,16 @@ dependencies = [
 
 [[package]]
 name = "rb-sys"
-version = "0.8.1"
+version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4db52af35291b64ce86f23f755b4576c20e3063b517269252b2f8cc883ca00e6"
+checksum = "e5397d604589a1403fbd49b1af9265b88cdf12975cc1b2dafc7574af7ff6c5bf"
 dependencies = [
  "bindgen",
- "libc",
+ "cc",
+ "lazy_static",
+ "linkify",
  "pkg-config",
+ "shell-words",
 ]
 
 [[package]]
@@ -304,6 +322,12 @@ name = "rustc-hash"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
+
+[[package]]
+name = "shell-words"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "24188a676b6ae68c3b2cb3a01be17fbf7240ce009799bb56d5b1409051e78fde"
 
 [[package]]
 name = "shlex"

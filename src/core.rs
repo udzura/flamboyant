@@ -1,8 +1,8 @@
 use std::ffi::CString;
 use std::io::prelude::*;
-use std::mem::forget;
 use std::net::TcpListener;
 use std::net::TcpStream;
+use std::slice;
 
 use rb_sys::*;
 
@@ -43,38 +43,23 @@ fn serve(app: RubyValue) {
 }
 
 fn handle_connection(app: RubyValue, mut stream: TcpStream) {
-    let mut buffer = [0; 4096];
+    let mut buffer: Vec<u8> = Vec::new();
 
-    stream.read(&mut buffer).unwrap();
+    stream.read_to_end(&mut buffer).unwrap();
 
-    let index = buffer
-        .iter()
-        .enumerate()
-        .find(|(_i, chr)| return **chr == ('\0' as u8))
-        .unwrap();
-    let string = CString::new(&buffer[..index.0]).unwrap();
-    println!("cstring: {:?}", &string);
+    let string = CString::new(&buffer[..]).unwrap();
     let reqstring = unsafe { rb_utf8_str_new_cstr(string.as_ptr()) };
     let call = CString::new("call").unwrap();
     let args = vec![reqstring];
     let response = unsafe { rb_funcallv(app, rb_intern(call.as_ptr()), 1, args.as_ptr()) };
-    unsafe { rb_p(response) };
-    //unsafe { rb_gc_writebarrier(app, response) };
     let mut response = Box::new(response);
 
-    let bytes: *mut i8 = unsafe { rb_string_value_ptr(response.as_mut()) };
-    let bytes_: Vec<i8> = unsafe { Vec::from_raw_parts(bytes, 4096, 4096) };
+    let bytes: *const i8 = unsafe { rb_string_value_ptr(response.as_mut()) };
+    let len = unsafe { macros::RSTRING_LEN(response.as_ref().clone()) };
+
+    let bytes_: &[i8] = unsafe { slice::from_raw_parts(bytes, len as usize) };
     let bytes: Vec<u8> = bytes_.iter().map(|v| *v as u8).collect();
-    forget(bytes_);
 
-    let index = bytes
-        .iter()
-        .enumerate()
-        .find(|(_i, chr)| return **chr == ('\0' as u8))
-        .unwrap();
-    let bytes = &bytes[..index.0];
-    // println!("cstring: {:?}", bytes);
-
-    stream.write(bytes).unwrap();
+    stream.write(&bytes).unwrap();
     stream.flush().unwrap();
 }
