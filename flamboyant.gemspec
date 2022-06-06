@@ -28,4 +28,5 @@ Gem::Specification.new do |spec|
   spec.extensions    = ["Cargo.toml"]
 
   spec.add_dependency "rack"
+  spec.add_dependency "webrick"
 end

@@ -43,11 +43,16 @@ fn serve(app: RubyValue) {
 }
 
 fn handle_connection(app: RubyValue, mut stream: TcpStream) {
-    let mut buffer: Vec<u8> = Vec::new();
+    let mut buffer = [0; 4096];
 
-    stream.read_to_end(&mut buffer).unwrap();
+    stream.read(&mut buffer).unwrap();
+    let index = buffer
+        .iter()
+        .enumerate()
+        .find(|(_i, chr)| return **chr == ('\0' as u8))
+        .unwrap();
+    let string = CString::new(&buffer[..index.0]).unwrap();
 
-    let string = CString::new(&buffer[..]).unwrap();
     let reqstring = unsafe { rb_utf8_str_new_cstr(string.as_ptr()) };
     let call = CString::new("call").unwrap();
     let args = vec![reqstring];
