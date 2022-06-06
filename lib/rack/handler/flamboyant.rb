@@ -3,9 +3,13 @@ require 'webrick'
 require 'webrick/httprequest'
 require 'rack'
 require 'uri'
+require 'stringio'
 
 class WEBrick::HTTPRequest
   def generate_from_string(reqline, lines)
+    @peeraddr = [] # TODO set in Rust
+    @addr = []
+    
     read_request_one_line(reqline)
     if @http_version.major > 0
       read_header_str(lines)
@@ -81,6 +85,8 @@ module Rack
       SERVER_NAME = "Flamboyant/0.1.0 experimental"
       
       def self.run(app, **options)
+        ENV["PORT"] ||= options[:Port]&.to_s || "9292"
+        
         server = ::Flamboyant.new
         config = ::WEBrick::Config::HTTP.merge(
           ServerSoftware: SERVER_NAME
@@ -93,13 +99,11 @@ module Rack
               head, rbody = req.split("\r\n\r\n")
               heads = head.lines
               wreq = ::WEBrick::HTTPRequest.new(config)
-              p "get req"
               wreq.generate_from_string(heads[0], heads[1..heads.size])
-              p "generated req..."
               
               env = wreq.meta_vars
               env.delete_if { |k, v| v.nil? }
-              rack_input = StringIO.new(rbody)
+              rack_input = StringIO.new(rbody || "")
               rack_input.set_encoding(Encoding::BINARY)
 
               env.update(
@@ -109,10 +113,12 @@ module Rack
                 ::Rack::RACK_URL_SCHEME   => ["yes", "on", "1"].include?(env[::Rack::HTTPS]) ? "https" : "http",
                 ::Rack::RACK_IS_HIJACK    => true,
                 ::Rack::RACK_HIJACK       => lambda { raise NotImplementedError, "only partial hijack is supported."},
-                ::Rack::RACK_HIJACK_IO    => nil
+                ::Rack::RACK_HIJACK_IO    => nil,
+                'rack.multithread'        => false,
+                'rack.multiprocess'       => false,
+                'rack.run_once'           => false
               )
 
-              p "calling app..."
               status, headers, body = app.call(env)
               headers["Server"] = SERVER_NAME
               res = [
@@ -124,7 +130,7 @@ module Rack
               
               return res
             rescue => e
-              body = e.inspect
+              body = e.inspect + e.backtrace.join("\n")
               
               res = [
                 "HTTP/1.1 503 Internal Server Error",
@@ -133,6 +139,7 @@ module Rack
                 "",
                 body
               ].join("\r\n")
+              return res
             end
           }
         )
