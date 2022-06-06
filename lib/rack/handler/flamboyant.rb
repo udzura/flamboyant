@@ -93,8 +93,6 @@ module Rack
         )
         server.serve(
           lambda { |req|
-            p req
-            
             begin
               head, rbody = req.split("\r\n\r\n")
               heads = head.lines

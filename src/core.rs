@@ -1,3 +1,4 @@
+use std::env;
 use std::ffi::CString;
 use std::io::prelude::*;
 use std::net::TcpListener;
@@ -30,7 +31,10 @@ fn serve(app: RubyValue) {
         libc::signal(libc::SIGTERM, libc::SIG_DFL);
     }
 
-    let listner = TcpListener::bind("127.0.0.1:17878").unwrap();
+    let port = env::var("PORT").unwrap();
+    let address = format!("127.0.0.1:{}", &port);
+
+    let listner = TcpListener::bind(&address).unwrap();
     println!(
         "Listening: http://{}",
         listner.local_addr().unwrap().to_string()
