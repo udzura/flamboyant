@@ -1,28 +1,21 @@
 use std::env;
 use std::ffi::CStr;
 use std::ffi::CString;
-use std::io;
-use std::io::prelude::*;
-use std::io::ErrorKind;
-use std::net::TcpListener;
-use std::net::TcpStream;
 use std::os::unix::prelude::RawFd;
 use std::slice;
+use std::sync::mpsc::*;
+use std::sync::Arc;
+use std::sync::Mutex;
 use std::thread::spawn;
 
 use libc::close;
 use libc::FIONBIO;
 use nix::errno::Errno;
-use nix::ioctl_write_ptr;
-use nix::sys::ioctl;
 use nix::sys::select;
 use nix::sys::select::FdSet;
 use nix::sys::socket::recv;
-use nix::sys::socket::recvfrom;
 use nix::sys::socket::send;
-use nix::sys::socket::sendmsg;
 use nix::sys::socket::MsgFlags;
-use nix::sys::socket::SockaddrIn;
 use rb_sys::*;
 
 const _HELLO: &'static str = "<!DOCTYPE html>
@@ -50,7 +43,7 @@ fn serve(app: RubyValue) {
     }
 
     let port = env::var("PORT").unwrap();
-    let address = format!("127.0.0.1:{}", &port);
+    // let address = format!("127.0.0.1:{}", &port);
 
     // let listner = TcpListener::bind(&address).unwrap();
     // println!(
@@ -75,16 +68,25 @@ fn serve(app: RubyValue) {
 
     let addr = SockaddrIn::new(127, 0, 0, 1, port.parse().unwrap());
     bind(sock, &addr).unwrap();
-    listen(sock, 1024).unwrap();
+    listen(sock, 4096).unwrap();
+    println!("Listening");
+
+    let (sender, receiver) = sync_channel::<Vec<u8>>(4096);
+    let (out_sender, out_receiver) = sync_channel::<Vec<u8>>(4096);
 
     let mut fdset = FdSet::new();
     fdset.insert(sock);
 
-    loop {
+    let out_recvr = Arc::new(Mutex::new(out_receiver));
+    let sendr = Arc::new(Mutex::new(sender));
+
+    let th = spawn(move || loop {
         match select::select(None, Some(&mut fdset), None, None, None) {
             Ok(n) => {
                 let sock = fdset.highest().unwrap();
                 if n > 0 {
+                    let go = sendr.clone();
+                    let out = out_recvr.clone();
                     spawn(move || {
                         let fd: RawFd;
                         loop {
@@ -93,8 +95,11 @@ fn serve(app: RubyValue) {
                                 break;
                             }
                         }
-                        eprintln!("Accept fd={}", fd);
-                        handle_connection(app, fd);
+                        let data = process(fd);
+                        go.lock().unwrap().send(data).unwrap();
+                        let bytes = out.lock().unwrap().recv().unwrap();
+                        //let bytes = out_receiver.recv().unwrap();
+                        do_response(fd, &bytes);
                         unsafe { close(fd) };
                     });
                 }
@@ -106,21 +111,34 @@ fn serve(app: RubyValue) {
                 }
             },
         }
+    });
+
+    loop {
+        let data = receiver.recv().unwrap();
+        let req = String::from_utf8_lossy(&data);
+        let reqline = req.lines().collect::<Vec<&str>>()[0];
+        println!("{}", reqline);
+        let response = handle_connection(app, &data);
+        out_sender.send(response).unwrap();
     }
+
+    th.join().unwrap();
 }
 
 //fn handle_connection(app: RubyValue, stream: &mut TcpStream) -> bool {
-fn handle_connection(app: RubyValue, stream: RawFd) {
+fn process(stream: RawFd) -> Vec<u8> {
     let mut buffer = [0; 4096];
 
     let mut read_bytes = 0;
     loop {
         match recv(stream, &mut buffer, MsgFlags::empty()) {
             Ok(n) => {
-                eprintln!("Read {} bytes", n);
-                read_bytes += n;
-                if read_bytes > 0 {
-                    break;
+                if n > 0 {
+                    read_bytes += n;
+                } else {
+                    if read_bytes > 0 {
+                        break;
+                    }
                 }
             }
             Err(e) => match e {
@@ -136,12 +154,30 @@ fn handle_connection(app: RubyValue, stream: RawFd) {
         }
     }
 
+    if read_bytes == 0 {
+        return vec![0];
+    }
+
     let index = buffer
         .iter()
         .enumerate()
         .find(|(_i, chr)| return **chr == ('\0' as u8))
         .unwrap();
-    let request = CStr::from_bytes_with_nul(&buffer[..(index.0 + 1)]).unwrap();
+
+    let data = (&buffer[..(index.0 + 1)]).to_vec();
+    return data;
+}
+
+fn do_response(stream: RawFd, bytes: &[u8]) {
+    send(stream, &bytes, MsgFlags::empty()).unwrap();
+    //stream.write(&bytes).unwrap();
+    //stream.flush().unwrap();
+
+    return;
+}
+
+fn handle_connection(app: RubyValue, data: &[u8]) -> Vec<u8> {
+    let request = CStr::from_bytes_with_nul(data).unwrap();
     let reqstring = unsafe { rb_utf8_str_new_cstr(request.as_ptr()) };
 
     let call = CString::new("call").unwrap();
@@ -149,19 +185,15 @@ fn handle_connection(app: RubyValue, stream: RawFd) {
     let response = unsafe { rb_funcallv(app, rb_intern(call.as_ptr()), 1, args.as_ptr()) };
     let mut response = Box::new(response);
 
+    // unsafe {
+    //     rb_p(*response.as_mut());
+    // }
+
     let bytes: *const i8 = unsafe { rb_string_value_ptr(response.as_mut()) };
     let len = unsafe { macros::RSTRING_LEN(response.as_ref().clone()) };
 
     let bytes_: &[i8] = unsafe { slice::from_raw_parts(bytes, len as usize) };
     let bytes: Vec<u8> = bytes_.iter().map(|v| *v as u8).collect();
 
-    unsafe {
-        rb_p(*response.as_mut());
-    }
-
-    send(stream, &bytes, MsgFlags::empty()).unwrap();
-    //stream.write(&bytes).unwrap();
-    //stream.flush().unwrap();
-
-    return;
+    bytes
 }
